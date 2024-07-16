@@ -3,7 +3,10 @@ local gaussianBlurShader
 local metallic = 1.0
 local roughness = 0.5
 local dispersionStrength = 0.02
-local canvas, bloomCanvas, blurCanvas
+local canvas, bloomCanvas, blurCanvas, backgroundCanvas
+local environmentMap
+local backgroundShader
+local startTime
 
 local topLim = 50
 local bottomLim = 550
@@ -62,10 +65,39 @@ local fieldEdges = {
     },
 }
 
+
+local function drawActors()
+    -- Left paddle
+    love.graphics.rectangle("fill", leftPaddle.x, leftPaddle.y, leftPaddle.width, leftPaddle.height)
+
+    -- Right paddle
+    love.graphics.rectangle("fill", rightPaddle.x, rightPaddle.y, rightPaddle.width, rightPaddle.height)
+
+    -- Ball
+    love.graphics.circle("fill", ball.x, ball.y, ball.radius)
+end
+
+local function drawScene()
+    -- Draw edges
+    love.graphics.line(fieldEdges.top.x1, fieldEdges.top.y1, fieldEdges.top.x2, fieldEdges.top.y2)
+    love.graphics.line(fieldEdges.right.x1, fieldEdges.right.y1, fieldEdges.right.x2, fieldEdges.right.y2)
+    love.graphics.line(fieldEdges.bottom.x1, fieldEdges.bottom.y1, fieldEdges.bottom.x2, fieldEdges.bottom.y2)
+    love.graphics.line(fieldEdges.left.x1, fieldEdges.left.y1, fieldEdges.left.x2, fieldEdges.left.y2)
+
+    -- Mid line
+    love.graphics.line(400, 0, 400, 700)
+end
+
+
 function love.load()
+    startTime = love.timer.getTime()
     love.window.setTitle("Ultra Pong")
 
     paddleShader = love.graphics.newShader("metallic.fs")
+    backgroundShader = love.graphics.newShader("background_shader.fs")
+
+    canvas = love.graphics.newCanvas()
+    backgroundCanvas = love.graphics.newCanvas()
 
     -- Load the environment map
     environmentMap = love.graphics.newImage("environment_map.png")
@@ -78,31 +110,19 @@ function love.load()
     -- paddleShader:send("roughness", roughness)
     paddleShader:send("dispersionStrength", dispersionStrength)
 
-    canvas = love.graphics.newCanvas()
-    bloomCanvas = love.graphics.newCanvas()
-    blurCanvas = love.graphics.newCanvas()
-
-    bloomShader = love.graphics.newShader("bloom.fs")
-    -- horizontalBlurShader = love.graphics.newShader("horizontal_blur.fs")
-    -- verticalBlurShader = love.graphics.newShader("vertical_blur.fs")
-    gaussianBlurShader = love.graphics.newShader("make_bloom.fs")
-    -- gaussianBlurShader:send("texelWidth", 1 / love.graphics.getWidth())
-    -- gaussianBlurShader:send("texelHeight", 1 / love.graphics.getHeight())
-    -- gaussianBlurShader:send("sigma", 3.0)
-    -- gaussianBlurShader:send("bloomIntensity", 2.0)
-    gaussianBlurShader:send("pixelSize", {1.0 / canvas:getWidth(), 1.0 / canvas:getHeight()})
-
-    -- horizontalBlurShader:send("texelWidth", 1 / love.graphics.getWidth())
-    -- verticalBlurShader:send("texelHeight", 1 / love.graphics.getHeight())
-
-    -- shaders["paddleShader"] = love.graphics.newShader("metallic.fs")
-
-    -- shaders["paddleShader"]:send("newColor", {1.0, 0.0, 0.0, 1.0})
-    love.graphics.setBackgroundColor(0.5, 0.1, 0.1)
+    backgroundShader:send("time", 0.0)
+    backgroundShader:send("a", { 0.5, 0.5, 0.5 })
+    backgroundShader:send("b", { 0.5, 0.5, 0.5 })
+    backgroundShader:send("c", { 1.0, 1.0, 1.0 })
+    backgroundShader:send("d", { 0.263, 0.416, 0.557 })
+    -- backgroundShader:send("uvOffset", canvas:getWidth())
 end
 
 function love.update(dt)
     local time = love.timer.getTime()
+
+    -- Update shaders
+    backgroundShader:send("time", time - startTime)
 
     if love.keyboard.isDown("s") then
         leftPaddle.y = math.min(leftPaddle.y + leftPaddle.speed * dt, 500)
@@ -144,73 +164,40 @@ function love.update(dt)
 end
 
 function love.draw()
+    -- Render the background
+    love.graphics.setCanvas(backgroundCanvas)
+    love.graphics.clear()
+    love.graphics.setShader(backgroundShader)
+    -- Draw a rectangle that fills the whole screen
+    love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    love.graphics.setShader()
+    love.graphics.setCanvas()
+
     -- Render the scene to the canvas
     love.graphics.setCanvas(canvas)
-    love.graphics.clear(1, 1, 1, 0)
+    love.graphics.clear()
     love.graphics.setShader()
     drawActors()
     love.graphics.setShader()
     love.graphics.setCanvas()
 
-    love.graphics.setCanvas(bloomCanvas)
-    love.graphics.clear()
-    love.graphics.setShader(bloomShader)
-    love.graphics.draw(canvas)
-    love.graphics.setShader()
-    love.graphics.setCanvas()
-
-    love.graphics.setCanvas(blurCanvas)
-    love.graphics.clear(1, 1, 1, 0)
-    love.graphics.setShader(gaussianBlurShader)
-    love.graphics.draw(bloomCanvas)
-    love.graphics.setShader()
-    love.graphics.setCanvas()
-
     -- love.graphics.setCanvas(bloomCanvas)
     -- love.graphics.clear()
-    -- love.graphics.setShader(verticalBlurShader)
-    -- love.graphics.draw(blurCanvas)
+    -- love.graphics.setShader(bloomShader)
+    -- love.graphics.draw(canvas)
     -- love.graphics.setShader()
     -- love.graphics.setCanvas()
 
-    -- love.graphics.setCanvas(canvas)
-    -- love.graphics.setShader()
-    -- drawScene()
+    -- love.graphics.setCanvas(blurCanvas)
+    -- love.graphics.clear(1, 1, 1, 0)
+    -- love.graphics.setShader(gaussianBlurShader)
+    -- love.graphics.draw(bloomCanvas)
     -- love.graphics.setShader()
     -- love.graphics.setCanvas()
 
+    love.graphics.draw(backgroundCanvas, 0, 0)
+    -- love.graphics.setBlendMode("add")
     love.graphics.draw(canvas)
-    love.graphics.setBlendMode("add")
-    love.graphics.draw(blurCanvas)
+    -- love.graphics.draw(blurCanvas)
     love.graphics.setBlendMode("alpha")
-
-    -- -- Set paddle shaders
-    -- love.graphics.setShader(paddleShader)
-
-    -- drawScene()
-
-    -- -- Clear paddleShader
-    -- love.graphics.setShader()
-end
-
-function drawActors()
-    -- Left paddle
-    love.graphics.rectangle("fill", leftPaddle.x, leftPaddle.y, leftPaddle.width, leftPaddle.height)
-
-    -- Right paddle
-    love.graphics.rectangle("fill", rightPaddle.x, rightPaddle.y, rightPaddle.width, rightPaddle.height)
-
-    -- Ball
-    love.graphics.circle("fill", ball.x, ball.y, ball.radius)
-end
-
-function drawScene()
-    -- Draw edges
-    love.graphics.line(fieldEdges.top.x1, fieldEdges.top.y1, fieldEdges.top.x2, fieldEdges.top.y2)
-    love.graphics.line(fieldEdges.right.x1, fieldEdges.right.y1, fieldEdges.right.x2, fieldEdges.right.y2)
-    love.graphics.line(fieldEdges.bottom.x1, fieldEdges.bottom.y1, fieldEdges.bottom.x2, fieldEdges.bottom.y2)
-    love.graphics.line(fieldEdges.left.x1, fieldEdges.left.y1, fieldEdges.left.x2, fieldEdges.left.y2)
-
-    -- Mid line
-    love.graphics.line(400, 0, 400, 700)
 end
